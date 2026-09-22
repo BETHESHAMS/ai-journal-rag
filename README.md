@@ -155,15 +155,6 @@ We implemented a sentence-boundary-aware recursive chunker with sliding overlap 
 
 ---
 
-## 5. Terminal Logs for Video Demo
 
-When recording your 1-3 minute screen demo, keep your backend terminal visible! The application prints structured logs during ingestion and retrieval:
-
-```text
-================== [RAG RETRIEVAL PIPELINE] ==================
-User Query: "What did I eat on Tuesday?"
-Tenant Scoping (user_id): 3f1e9480-1a2b-4c3d-8e4f-56789abcdef0
-Found 1 matching chunks for user.
-  [1] Score: 0.884 | Date: 2026-09-20 | "On Tuesday morning I had oatmeal with blueberries and honey..."
 ============================================================
 ```

@@ -15,42 +15,51 @@ async def register(user_in: UserCreate):
     Registers a new user account with secure password hashing.
     Enforces uniqueness on email address.
     """
-    supabase = get_supabase_client()
-    
-    # Check if email is already taken
-    existing = supabase.table("users").select("id").eq("email", user_in.email.lower()).execute()
-    if existing.data and len(existing.data) > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="An account with this email already exists."
+    try:
+        supabase = get_supabase_client()
+        
+        # Check if email is already taken
+        existing = supabase.table("users").select("id").eq("email", user_in.email.lower()).execute()
+        if existing.data and len(existing.data) > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="An account with this email already exists."
+            )
+
+        # Hash password using bcrypt
+        hashed = get_password_hash(user_in.password)
+
+        # Insert user record
+        insert_res = supabase.table("users").insert({
+            "email": user_in.email.lower(),
+            "hashed_password": hashed
+        }).execute()
+
+        if not insert_res.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user record. Please check Supabase schema."
+            )
+
+        user_record = insert_res.data[0]
+        user_id = str(user_record["id"])
+
+        # Issue JWT Token
+        token = create_access_token({"sub": user_id, "email": user_record["email"]})
+        
+        return Token(
+            access_token=token,
+            token_type="bearer",
+            user=UserResponse(id=user_id, email=user_record["email"])
         )
-
-    # Hash password using bcrypt
-    hashed = get_password_hash(user_in.password)
-
-    # Insert user record
-    insert_res = supabase.table("users").insert({
-        "email": user_in.email.lower(),
-        "hashed_password": hashed
-    }).execute()
-
-    if not insert_res.data:
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Registration error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create user record."
+            detail=f"Database error during registration: {str(e)}"
         )
-
-    user_record = insert_res.data[0]
-    user_id = str(user_record["id"])
-
-    # Issue JWT Token
-    token = create_access_token({"sub": user_id, "email": user_record["email"]})
-    
-    return Token(
-        access_token=token,
-        token_type="bearer",
-        user=UserResponse(id=user_id, email=user_record["email"])
-    )
 
 
 @router.post("/login", response_model=Token)
@@ -58,30 +67,39 @@ async def login(user_in: UserLogin):
     """
     Authenticates an existing user and returns a signed JWT access token.
     """
-    supabase = get_supabase_client()
+    try:
+        supabase = get_supabase_client()
 
-    query_res = supabase.table("users").select("*").eq("email", user_in.email.lower()).execute()
-    if not query_res.data or len(query_res.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password."
+        query_res = supabase.table("users").select("*").eq("email", user_in.email.lower()).execute()
+        if not query_res.data or len(query_res.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password. Please check your credentials."
+            )
+
+        user_record = query_res.data[0]
+        if not verify_password(user_in.password, user_record["hashed_password"]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password."
+            )
+
+        user_id = str(user_record["id"])
+        token = create_access_token({"sub": user_id, "email": user_record["email"]})
+
+        return Token(
+            access_token=token,
+            token_type="bearer",
+            user=UserResponse(id=user_id, email=user_record["email"])
         )
-
-    user_record = query_res.data[0]
-    if not verify_password(user_in.password, user_record["hashed_password"]):
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password."
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error during login: {str(e)}"
         )
-
-    user_id = str(user_record["id"])
-    token = create_access_token({"sub": user_id, "email": user_record["email"]})
-
-    return Token(
-        access_token=token,
-        token_type="bearer",
-        user=UserResponse(id=user_id, email=user_record["email"])
-    )
 
 
 @router.get("/me", response_model=UserResponse)

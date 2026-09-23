@@ -1,7 +1,8 @@
 import { AuthResponse, JournalEntry, User, HealthStatus, Citation } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
+const metaEnv = (import.meta as any).env;
+const API_BASE = metaEnv && metaEnv.VITE_API_URL
+  ? `${metaEnv.VITE_API_URL}/api`
   : '/api';
 
 export const tokenStorage = {
